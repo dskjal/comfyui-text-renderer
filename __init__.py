@@ -3,6 +3,42 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import os
 import glob
+import re
+
+# https://www.chokanji.com/ckv/manual/03-07-02.html
+char_offset = {
+    "、": (0.6, 0),
+    "。": (0.6, 0),
+    "，": (0.6, 0),
+    "．": (0.6, 0),
+    "ぁ": (0.2,0),
+    "ぃ": (0.2,0),
+    "ぅ": (0.2,0),
+    "ぇ": (0.2,0),
+    "ぉ": (0.2,0),
+    "っ": (0.2,0),
+    "ゃ": (0.2,0),
+    "ゅ": (0.2,0),
+    "ょ": (0.2,0),
+    "ゎ": (0.2,0),
+    "ァ": (0.2,0),
+    "ィ": (0.2,0),
+    "ゥ": (0.2,0),
+    "ェ": (0.2,0),
+    "ォ": (0.2,0),
+    "ッ": (0.2,0),
+    "ャ": (0.2,0),
+    "ュ": (0.2,0),
+    "ョ": (0.2,0),
+    "ヮ": (0.2,0),
+    "ヵ": (0.2,0),
+    "ヶ": (0.2,0),
+}
+
+rotate_chars = {"ー", "―", "…", "～", "-", "（", "）", "【", "】", "＜", "＞", "『", "』", "(", ")", "<", ">", "{", "}", "[", "]", "〈", "〉", "《", "》", "≪", "≫"}
+# 一括オフセット登録
+for c in rotate_chars:
+    char_offset[c] = (0, 0.4)
 
 class TextRenderNode:
     # クラス変数としてキャッシュ
@@ -122,6 +158,8 @@ class TextRenderNode:
         return {
             "required": {
                 "text": ("STRING", {"multiline": True, "default": "Hello World"}),
+                "extract_double_quoted_text": ("BOOLEAN", {"default": False}),
+                "direction": (["horizontal", "vertical"], ),
                 "font_size": ("INT", {"default": 48, "min": 8, "max": 500, "step": 1}),
                 "width": ("INT", {"default": 512, "min": 64, "max": 4096, "step": 64}),
                 "height": ("INT", {"default": 512, "min": 64, "max": 4096, "step": 64}),
@@ -138,7 +176,9 @@ class TextRenderNode:
     FUNCTION = "render_text"
     CATEGORY = "image/text"
 
-    def render_text(self, text, font_size, width, height, font_name, text_color, bg_color, align, outline_width, outline_color):
+    # def render_line(self, draw, font, text, direction, x, y, font_size, width, height, font_name, text_color, bg_color, align, outline_width, outline_color):
+
+    def render_text(self, text, extract_double_quoted_text, direction, font_size, width, height, font_name, text_color, bg_color, align, outline_width, outline_color):
         # 背景色の設定
         color_map = {
             "white": (255, 255, 255, 255),
@@ -174,32 +214,84 @@ class TextRenderNode:
             print(f"フォント読み込みエラー: {e}")
             font = ImageFont.load_default()
         
-        # テキストの位置計算
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        # 水平位置
-        if align == "center":
-            x = (width - text_width) // 2
-        elif align == "right":
-            x = width - text_width - 10
-        else:  # left
-            x = 10
-        
-        # 垂直位置(中央)
-        y = (height - text_height) // 2
-        
-        # テキスト描画（アウトラインあり）
-        if outline_width > 0:
-            # アウトラインを描画
-            for adj_x in range(-outline_width, outline_width + 1):
-                for adj_y in range(-outline_width, outline_width + 1):
-                    if adj_x != 0 or adj_y != 0:
-                        draw.text((x + adj_x, y + adj_y), text, fill=color_map[outline_color], font=font)
-        
-        # メインテキストを描画
-        draw.text((x, y), text, fill=color_map[text_color], font=font)
+        # テキストの抜き出し
+        if extract_double_quoted_text:
+            texts = re.findall(r'"([^"]+)"', text)
+            text = '\n\n'.join(texts)
+
+        line_margin_v = int(font_size/10)   # 縦書きの行間
+        char_margin_v = int(font_size/10)   # 縦書きの字間
+        old_y = 10
+        text_height = 0
+        for text in text.split('\n'):
+            # 空行処理
+            if not text:
+                old_y = old_y + text_height
+                continue
+
+            # テキストの位置計算
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            # 水平位置
+            if align == "center":
+                x = (width - text_width) // 2
+            elif align == "right":
+                x = width - text_width - 10
+            else:  # left
+                x = 10
+            
+            y = old_y
+            old_y = y + text_height
+            
+            # メインテキストを描画
+            if direction == 'horizontal':
+                # テキスト描画（アウトラインあり）
+                if outline_width > 0:
+                    # アウトラインを描画
+                    for adj_x in range(-outline_width, outline_width + 1):
+                        for adj_y in range(-outline_width, outline_width + 1):
+                            if adj_x != 0 or adj_y != 0:
+                                draw.text((x + adj_x, y + adj_y), text, fill=color_map[outline_color], font=font)
+
+                draw.text((x, y), text, fill=color_map[text_color], font=font)
+            else:
+                """
+                縦書き処理
+                """
+                old_y += line_margin_v
+                # direction='ttb' で縦書きができるが、libraqm のインストールが面倒。一文字ずつ描画して縦書きにする
+                def calc_char_offset(c:str, x:int, y:int, font_size:int) -> list:
+                    if c in char_offset:
+                        dx, dy = char_offset[c]
+                        return (x + int(dx*font_size), y + int(dy*font_size))
+                    return (x, y)
+                
+                y_v = x
+                x_v = width - y - 2* text_height
+                for i in range(len(text)):
+                    c = text[i]
+                    pos = calc_char_offset(c, x_v, y_v, font_size)
+                    y_v += text_height + char_margin_v
+
+                    if c in rotate_chars:
+                        # 回転が必要な文字ーや…などの処理
+                        # 一文字用の透明キャンバスを作成
+                        tmp = Image.new("RGBA", (text_height, text_height), (0, 0, 0, 0))
+                        tmp_draw = ImageDraw.Draw(tmp)
+
+                        # 中央に通常描画
+                        tmp_draw.text((text_height // 2, text_height // 2), c, fill=color_map[text_color], font=font, anchor="mm")
+
+                        # -90 度回転
+                        tmp = tmp.rotate(-90, expand=True)
+
+                        # メイン画像へ合成
+                        image.alpha_composite(tmp, dest=(pos[0] - tmp.size[0], pos[1] - tmp.size[1] // 2))
+                    else:
+                        draw.text(pos, c, fill=color_map[text_color], font=font, anchor='rt')
+
         
         # PIL ImageをComfyUI形式のテンソルに変換
         # ComfyUIはRGB形式を期待し、形状は [batch, height, width, channels]
