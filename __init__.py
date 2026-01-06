@@ -5,6 +5,7 @@ import os
 import glob
 import re
 
+# 全角縦・半角横
 # https://www.chokanji.com/ckv/manual/03-07-02.html
 char_offset = {
     "、": (0.6, 0),
@@ -16,7 +17,7 @@ char_offset = {
     "ぅ": (0.2,0),
     "ぇ": (0.2,0),
     "ぉ": (0.2,0),
-    "っ": (0.2,0),
+    "っ": (0.2,0.15),
     "ゃ": (0.2,0),
     "ゅ": (0.2,0),
     "ょ": (0.2,0),
@@ -270,13 +271,34 @@ class TextRenderNode:
                 
                 y_v = x
                 x_v = width - y - 2* text_height
-                for i in range(len(text)):
+                i = 0
+                while i < len(text):
                     c = text[i]
                     pos = calc_char_offset(c, x_v, y_v, font_size)
                     y_v += text_height + char_margin_v
 
-                    if c in rotate_chars:
-                        # 回転が必要な文字ーや…などの処理
+                    if c.isascii():
+                        # アスキー文字はまとめて横にレンダリングした後に 90 度回転
+                        start = i
+                        i += 1
+                        while i < len(text) and text[i].isascii():
+                            i += 1
+                        end = i
+                        text_extracted = text[start:end]
+                        bbox = draw.textbbox((0, 0), text_extracted, font=font)
+                        tmp_width = bbox[2] - bbox[0]
+                        tmp_height = bbox[3] - bbox[1] + int(font_size*0.5) # これがないと文字の下側が欠ける
+                        tmp = Image.new("RGBA", (tmp_width, tmp_height), (0, 0, 0, 0))
+                        tmp_draw = ImageDraw.Draw(tmp)
+                        tmp_draw.text((tmp_width // 2, tmp_height // 2), text_extracted, fill=color_map[text_color], font=font, anchor="mm")
+                        tmp = tmp.rotate(-90, expand=True)
+                        image.alpha_composite(tmp, dest=(pos[0] - int(text_height * 1.2), pos[1]))
+
+                        i -= 1 # ループ下端で加算されるので
+                        y_v += tmp_width - text_height - char_margin_v
+
+                    elif c in rotate_chars:
+                        # 回転が必要な文字（ー…など）の処理
                         # 一文字用の透明キャンバスを作成
                         tmp = Image.new("RGBA", (text_height, text_height), (0, 0, 0, 0))
                         tmp_draw = ImageDraw.Draw(tmp)
@@ -291,6 +313,8 @@ class TextRenderNode:
                         image.alpha_composite(tmp, dest=(pos[0] - tmp.size[0], pos[1] - tmp.size[1] // 2))
                     else:
                         draw.text(pos, c, fill=color_map[text_color], font=font, anchor='rt')
+                    
+                    i += 1
 
         
         # PIL ImageをComfyUI形式のテンソルに変換
