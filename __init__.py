@@ -5,41 +5,27 @@ import os
 import glob
 import re
 
+# https://pillow.readthedocs.io/en/stable/handbook/text-anchors.html#text-anchors
+
 # 全角縦・半角横
 # https://www.chokanji.com/ckv/manual/03-07-02.html
+# (x, y) x + で右に移動、y + で下に移動
 char_offset = {
-    "、": (0.6, 0),
-    "。": (0.6, 0),
-    "，": (0.6, 0),
-    "．": (0.6, 0),
-    "ぁ": (0.2,0),
-    "ぃ": (0.2,0),
-    "ぅ": (0.2,0),
-    "ぇ": (0.2,0),
-    "ぉ": (0.2,0),
-    "っ": (0.2,0.15),
-    "ゃ": (0.2,0),
-    "ゅ": (0.2,0),
-    "ょ": (0.2,0),
-    "ゎ": (0.2,0),
-    "ァ": (0.2,0),
-    "ィ": (0.2,0),
-    "ゥ": (0.2,0),
-    "ェ": (0.2,0),
-    "ォ": (0.2,0),
-    "ッ": (0.2,0),
-    "ャ": (0.2,0),
-    "ュ": (0.2,0),
-    "ョ": (0.2,0),
-    "ヮ": (0.2,0),
-    "ヵ": (0.2,0),
-    "ヶ": (0.2,0),
+    "、": (0.6, -0.6),
+    "。": (0.6, -0.6),
+    "，": (0.6, -0.6),
+    "．": (0.6, -0.6),
 }
 
+# 小文字
+small_chars = ["ぁ" ,"ぃ" ,"ぅ" ,"ぇ" ,"ぉ" ,"っ" ,"ゃ" ,"ゅ" ,"ょ" ,"ゎ" ,"ァ" ,"ィ" ,"ゥ" ,"ェ" ,"ォ" ,"ッ" ,"ャ" ,"ュ" ,"ョ" ,"ヮ" ,"ヵ" ,"ヶ"]
+for c in small_chars:
+    char_offset[c] = (0.13, -0.13)
+
+# 回転文字
 rotate_chars = {"ー", "―", "…", "～", "-", "（", "）", "【", "】", "＜", "＞", "『", "』", "(", ")", "<", ">", "{", "}", "[", "]", "〈", "〉", "《", "》", "≪", "≫"}
-# 一括オフセット登録
 for c in rotate_chars:
-    char_offset[c] = (0, 0.4)
+    char_offset[c] = (0.5, 0.1)
 
 class TextRenderNode:
     # クラス変数としてキャッシュ
@@ -269,8 +255,8 @@ class TextRenderNode:
                         return (x + int(dx*font_size), y + int(dy*font_size))
                     return (x, y)
                 
-                y_v = x
-                x_v = width - y - 2* text_height
+                y_v = x + int(text_height * 0.5)
+                x_v = width - y - text_height
                 i = 0
                 while i < len(text):
                     c = text[i]
@@ -292,7 +278,7 @@ class TextRenderNode:
                         tmp_draw = ImageDraw.Draw(tmp)
                         tmp_draw.text((tmp_width // 2, tmp_height // 2), text_extracted, fill=color_map[text_color], font=font, anchor="mm")
                         tmp = tmp.rotate(-90, expand=True)
-                        image.alpha_composite(tmp, dest=(pos[0] - int(text_height * 1.2), pos[1]))
+                        image.alpha_composite(tmp, dest=(pos[0] - int(text_height * 0.6), pos[1] - int(text_height * 0.5)))
 
                         i -= 1 # ループ下端で加算されるので
                         y_v += tmp_width - text_height - char_margin_v
@@ -312,7 +298,7 @@ class TextRenderNode:
                         # メイン画像へ合成
                         image.alpha_composite(tmp, dest=(pos[0] - tmp.size[0], pos[1] - tmp.size[1] // 2))
                     else:
-                        draw.text(pos, c, fill=color_map[text_color], font=font, anchor='rt')
+                        draw.text(pos, c, fill=color_map[text_color], font=font, anchor='mm')
                     
                     i += 1
 
